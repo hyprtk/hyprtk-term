@@ -27,7 +27,8 @@ os.environ["HYPRTK_TERM_CONFIG"] = os.path.join(_SANDBOX, "config.json")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import Q_ARG, QMetaObject, QTimer, Qt, qInstallMessageHandler  # noqa: E402
+from PySide6.QtCore import Q_ARG, QMetaObject, QPoint, QPointF, QTimer, Qt, qInstallMessageHandler  # noqa: E402
+from PySide6.QtQuick import QQuickItem  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 
 from hyprtk_term.app import create  # noqa: E402
@@ -37,16 +38,39 @@ SCRIPT = "printf 'BOOTCHECK-OK\\n'; stty size; seq 1 80"
 problems: list[str] = []
 
 
+finished = False
+
+
 def handler(_mode, _ctx, message) -> None:
-    if message.strip():
-        problems.append(message)
-        print(message)
+    # Teardown (root context cleared before the window) logs a couple of
+    # "Cannot read property 'palette' of null" lines; they are not the app.
+    if finished or not message.strip():
+        return
+    problems.append(message)
+    print(message)
 
 
 def type_text(window, text: str) -> None:
     for ch in text:
         QTest.keyClick(window, Qt.Key_Space if ch == " " else ord(ch), Qt.NoModifier)
     QTest.keyClick(window, Qt.Key_Return)
+
+
+def tab_items(root) -> list:
+    """The tab-strip delegates (children of the Repeater, not of the Row)."""
+    for item in root.findChildren(QQuickItem):
+        if item.metaObject().className() != "QQuickRow":
+            continue
+        kids = [k for k in item.childItems() if k.objectName() == "tabButton"]
+        if kids:
+            return kids
+    return []
+
+
+def click_item(window, item) -> None:
+    point = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
+    QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier,
+                     QPoint(int(point.x()), int(point.y())))
 
 
 def screen_text(view: TerminalView) -> str:
@@ -120,11 +144,71 @@ def main() -> int:
         view.scrollToBottom()
         if view.scroll_offset != 0:
             problems.append("bootcheck: scrollToBottom left an offset")
-        QTimer.singleShot(200, settings)
+        QTimer.singleShot(200, tabs_stable)
+
+    def tabs_stable() -> None:
+        """A title change must not move the tabs (they used to resize to the title)."""
+        state["tabs_before"] = [(round(t.x()), round(t.width())) for t in tab_items(root)]
+        key = tab_items(root)[0].property("tabKey")
+        call("setLabel", Q_ARG("QVariant", key),
+             Q_ARG("QVariant", "vim /home/hyprtk/Projects/notes.md"))
+        QTimer.singleShot(200, tabs_check_geometry)
+
+    def tabs_check_geometry() -> None:
+        before = state.get("tabs_before") or []
+        after = [(round(t.x()), round(t.width())) for t in tab_items(root)]
+        if not before or before != after:
+            problems.append(f"bootcheck: tabs moved with the title: {before} -> {after}")
+        call("setLabel", Q_ARG("QVariant", tab_items(root)[0].property("tabKey")),
+             Q_ARG("QVariant", "Terminal"))
+        QTimer.singleShot(150, tabs_click)
+
+    def tabs_click() -> None:
+        items = tab_items(root)
+        if len(items) < 2:
+            problems.append(f"bootcheck: expected 2 tabs, found {len(items)}")
+            return settings()
+        click_item(root, items[0])
+        QTimer.singleShot(250, lambda: tabs_verify(items, 0))
+
+    def tabs_verify(items, index: int) -> None:
+        expected = items[index].property("tabKey")
+        if root.property("activeId") != expected:
+            problems.append(
+                f"bootcheck: clicking tab {index} gave {root.property('activeId')!r}, "
+                f"expected {expected!r}")
+        visible = [v for v in root.findChildren(TerminalView) if v.isVisible()]
+        if len(visible) != 1:
+            problems.append(f"bootcheck: {len(visible)} visible terminals")
+        if index + 1 < len(items):
+            click_item(root, items[index + 1])
+            QTimer.singleShot(250, lambda: tabs_verify(items, index + 1))
+        else:
+            # back to the tab that owns the BOOTCHECK output for the find test
+            click_item(root, items[0])
+            QTimer.singleShot(300, settings)
 
     def settings() -> None:
         root.setProperty("settingsOpen", True)
-        QTimer.singleShot(250, settings_close)
+        QTimer.singleShot(350, settings_layout)
+
+    def settings_layout() -> None:
+        """Every stepper button must sit inside the card."""
+        cards = [i for i in root.findChildren(QQuickItem) if i.objectName() == "settingsCard"]
+        plus = [i for i in root.findChildren(QQuickItem) if i.objectName() == "stepperPlus"]
+        if not cards:
+            problems.append("bootcheck: settings card not found")
+        elif not plus:
+            problems.append("bootcheck: no stepper buttons found")
+        else:
+            card_right = cards[0].mapToScene(QPointF(cards[0].width(), 0)).x()
+            for index, button in enumerate(plus):
+                right = button.mapToScene(QPointF(button.width(), 0)).x()
+                if right > card_right + 0.5:
+                    problems.append(
+                        f"bootcheck: stepper {index} overflows the card by "
+                        f"{round(right - card_right)} px")
+        QTimer.singleShot(150, settings_close)
 
     def settings_close() -> None:
         root.setProperty("settingsOpen", False)
@@ -155,6 +239,8 @@ def main() -> int:
         QTimer.singleShot(150, finish)
 
     def finish() -> None:
+        global finished
+        finished = True
         warnings = [p for p in problems if not p.startswith("bootcheck:")]
         failures = [p for p in problems if p.startswith("bootcheck:")]
         for failure in failures:
