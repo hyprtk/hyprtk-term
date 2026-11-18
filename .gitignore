@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+shot.png
+*.egg-info/
+build/
+dist/
+.scratch/
+venv/
+docs/*.png
+!docs/probe.png
