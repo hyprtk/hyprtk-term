@@ -31,6 +31,7 @@ from PySide6.QtCore import Q_ARG, QMetaObject, QPoint, QPointF, QTimer, Qt, qIns
 from PySide6.QtQuick import QQuickItem  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 
+from hyprtk_term import __version__  # noqa: E402
 from hyprtk_term.app import create  # noqa: E402
 from hyprtk_term.view import TerminalView  # noqa: E402
 
@@ -208,6 +209,16 @@ def main() -> int:
                     problems.append(
                         f"bootcheck: stepper {index} overflows the card by "
                         f"{round(right - card_right)} px")
+        labels = [i for i in root.findChildren(QQuickItem)
+                  if i.objectName() == "appVersion"]
+        if not labels:
+            problems.append("bootcheck: settings has no version label")
+        else:
+            expected = f"hyprtk-term {__version__}"
+            actual = str(labels[0].property("text") or "")
+            if actual != expected:
+                problems.append(
+                    f"bootcheck: version label is {actual!r}, expected {expected!r}")
         QTimer.singleShot(150, settings_close)
 
     def settings_close() -> None:
