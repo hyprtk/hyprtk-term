@@ -9,5 +9,3 @@ build/
 dist/
 .scratch/
 venv/
-docs/*.png
-!docs/probe.png
