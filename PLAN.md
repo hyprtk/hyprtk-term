@@ -1,9 +1,11 @@
 # hyprtk-term — plan
 
-Status: **v0.1.0 scaffold**, committed locally at `~/Projects/AI-Projects/hyprtk-term`
-(`main`, tag `v0.1.0` pending the first publish). The core is proven end to end
-(PTY → libvterm → QML), the app opens a real shell on Wayland, and the pieces
-that are deliberately missing are listed below rather than half-built.
+Status: **v0.2.0 shipped with suite v1.8.0** (2026-11-18). Repo
+`hyprtk/hyprtk-term` on `main`, tags `v0.1.0` and `v0.2.0`; vendored into
+`hyprtk-merged/installer/hyprtk-term/` and installed by `1-install.sh`. It is
+the session terminal (`$TERMINAL`, `Super+Return`, the bar's Terminal quick
+link, the file manager's "Open Terminal Here" and the editor's terminal
+action), with alacritty kept as the fallback for the gum menus.
 
 ## Decisions (and why)
 
