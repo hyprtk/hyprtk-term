@@ -128,7 +128,7 @@ grid, ~3 ms to paint it. Numbers and method in [RESEARCH.md](RESEARCH.md).
 ## Development
 
 ```bash
-make test     # 113 unit tests, no display needed
+make test     # 120 unit tests, no display needed
 make qa       # tests + qmllint + headless boot + installer round-trip
 make shot     # offscreen screenshot to docs/probe.png
 make run
