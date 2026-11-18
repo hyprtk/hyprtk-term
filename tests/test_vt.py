@@ -119,6 +119,44 @@ class TextAndRuns(unittest.TestCase):
         self.assertEqual(text(t, 0), "e\u0301")
 
 
+class BoxDrawingRuns(unittest.TestCase):
+    """Box drawing and blocks are painted geometrically, one cell per run."""
+
+    def test_each_geometric_cell_is_its_own_run(self):
+        t = term(cols=10)
+        t.feed("\u250c\u2500\u2510".encode())
+        runs = t.row_runs(0)
+        self.assertEqual([r.text for r in runs], ["\u250c", "\u2500", "\u2510"])
+        self.assertEqual([r.cols for r in runs], [1, 1, 1])
+
+    def test_text_and_geometry_interleave(self):
+        t = term(cols=10)
+        t.feed("a\u2502b".encode())
+        runs = t.row_runs(0)
+        self.assertEqual([r.text for r in runs], ["a", "\u2502", "b"])
+        self.assertEqual([r.cols for r in runs], [1, 1, 1])
+        self.assertEqual(text(t, 0), "a\u2502b")
+
+    def test_runs_still_share_a_style_across_geometry(self):
+        t = term(cols=10)
+        t.feed(b"\x1b[31m")
+        t.feed("\u2588\u2588".encode())
+        runs = t.row_runs(0)
+        self.assertEqual([r.text for r in runs], ["\u2588", "\u2588"])
+        self.assertEqual({r.fg for r in runs}, {ANSI[1]})
+
+    def test_block_elements_split_too(self):
+        t = term(cols=10)
+        t.feed("\u2580\u2584".encode())
+        self.assertEqual([r.text for r in t.row_runs(0)], ["\u2580", "\u2584"])
+
+    def test_scrollback_runs_keep_the_split(self):
+        t = term(rows=2, cols=10)
+        t.feed("\u250c\u2500\u2510\r\nx\r\ny".encode())
+        self.assertEqual([r.text for r in t.scrollback_runs(0)],
+                         ["\u250c", "\u2500", "\u2510"])
+
+
 class CursorAndProps(unittest.TestCase):
     def test_cursor_moves(self):
         t = term()
