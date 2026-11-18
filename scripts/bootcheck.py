@@ -247,7 +247,22 @@ def main() -> int:
         colors = root.property("th")
         if not isinstance(colors, dict) or "ansi" not in colors:
             problems.append(f"bootcheck: palette is {type(colors).__name__}")
-        QTimer.singleShot(150, finish)
+        QTimer.singleShot(150, alpha_check)
+
+    def alpha_check() -> None:
+        """At <100% opacity the strip and the grid must composite identically."""
+        _bridge.setConfig("opacity", 0.58)
+        QTimer.singleShot(400, alpha_verify)
+
+    def alpha_verify() -> None:
+        image = root.grabWindow()
+        header = image.pixelColor(600, 12)
+        body = image.pixelColor(600, image.height() - 20)
+        if header != body:
+            problems.append(
+                f"bootcheck: strip {header.name()} != grid {body.name()} at 58% opacity")
+        _bridge.setConfig("opacity", 0.98)
+        QTimer.singleShot(200, finish)
 
     def finish() -> None:
         global finished
