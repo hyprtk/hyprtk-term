@@ -1,8 +1,9 @@
 # hyprtk-term — plan
 
-Status: **v0.1.0 scaffold**. The core is proven end to end (PTY → libvterm →
-QML), the app opens a real shell, and the pieces that are deliberately missing
-are listed below rather than half-built.
+Status: **v0.1.0 scaffold**, committed locally at `~/Projects/AI-Projects/hyprtk-term`
+(`main`, tag `v0.1.0` pending the first publish). The core is proven end to end
+(PTY → libvterm → QML), the app opens a real shell on Wayland, and the pieces
+that are deliberately missing are listed below rather than half-built.
 
 ## Decisions (and why)
 
@@ -56,7 +57,7 @@ only object crossing the boundary per tab is `TerminalView`, which exposes
       process
 - [x] pywal/bar palette → ANSI 16, live reload on wallpaper change
 - [x] Settings sheet: font family, size, opacity, scrollback, shell
-- [x] 40+ unit tests, headless boot check, installer round-trip
+- [x] 93 unit tests, qmllint clean, headless boot check, installer round-trip
 
 ## Not in v0.1 (deliberate)
 
@@ -97,9 +98,10 @@ Follows the hyprtk-fm / hyprtk-editor pattern; nothing below is done yet.
 3. **Packages** — add `libvterm` to `hypr/packages/terminaltools.sh` for all six
    families (`libvterm` on Arch/Fedora/Void/Alpine, `libvterm0` on Debian,
    `libvterm0` on openSUSE — verify per family with the T1 resolver).
-4. **Icon** — add a `term` glyph to the brand kit (`gen/brand.py` +
-   `gen/v09.py`), generate `v09/hyprtk-term.svg` + the PNG ladder, ship the SVG
-   in the payload and write an absolute `Icon=` (suite convention).
+4. **Icon** — done in the brand kit (`term` glyph in `gen/brand.py`,
+   `hyprtk-term` in `gen/v09.py`, `v09/hyprtk-term*.svg` + PNG ladder) and
+   shipped in the payload with an absolute `Icon=` in `install.sh`; the merged
+   copy still has to be vendored.
 5. **Defaults** — `hl.env("TERMINAL", "hyprtk-term")` in `hypr/environment.lua`
    (alacritty stays installed as the fallback), `Super+Return` keybind, bar
    quick link, `hyprtk-fm` "Open terminal here", editor "Open terminal".
@@ -126,3 +128,11 @@ Follows the hyprtk-fm / hyprtk-editor pattern; nothing below is done yet.
   and paints the remainder with the background colour.
 - **Wayland clipboard on focus loss.** `QClipboard.text()` can be empty if the
   source app closed; paste falls back to the primary selection.
+- **Field test (2026-11-18).** Launched under Hyprland on the live session: the
+  toplevel reports `class=hyprtk-term` (so `setDesktopFileName` is doing its
+  job), the OSC title from the user's zsh prompt becomes the tab label, and
+  fastfetch/`eza`/`git --color` render with the wallpaper palette. No Qt
+  warnings, no crash.
+- **QML `text` bounds.** A `QQuickPaintedItem` does not clip by default in print
+  mode; `paint()` sets `setClipRect` to the grid. Anything drawn outside it
+  (long run, odd font fallback) is cut rather than overflowing the chrome.
