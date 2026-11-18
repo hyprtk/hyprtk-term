@@ -33,10 +33,29 @@ from PySide6.QtTest import QTest  # noqa: E402
 
 from hyprtk_term import __version__  # noqa: E402
 from hyprtk_term.app import create  # noqa: E402
+from hyprtk_term.terminal import Terminal  # noqa: E402
 from hyprtk_term.view import TerminalView  # noqa: E402
 
 SCRIPT = "printf 'BOOTCHECK-OK\\n'; stty size; seq 1 80"
 problems: list[str] = []
+
+# Resizes the shell is told about, in order. The window is laid out more than
+# once before it settles, and a resize that lands while the shell draws its
+# first prompt leaves zsh filling its partial-line marker with more spaces than
+# the grid holds -- the stray '%' above the prompt. The shell must therefore be
+# spawned into the settled grid, so this must stay empty through startup.
+resizes: list[tuple[int, int]] = []
+_resize = Terminal.resize
+
+
+def counting_resize(self, rows, cols):
+    changed = _resize(self, rows, cols)
+    if changed:
+        resizes.append((rows, cols))
+    return changed
+
+
+Terminal.resize = counting_resize
 
 
 finished = False
@@ -80,6 +99,17 @@ def screen_text(view: TerminalView) -> str:
     return "\n".join(rows)
 
 
+def pty_size(view: TerminalView) -> tuple[int, int]:
+    """(rows, cols) the kernel reports for the child, i.e. what it was told."""
+    import fcntl
+    import struct
+    import termios
+
+    buf = fcntl.ioctl(view.terminal.pty.fd, termios.TIOCGWINSZ, b"\0" * 8)
+    rows, cols, _xpix, _ypix = struct.unpack("HHHH", buf)
+    return rows, cols
+
+
 def main() -> int:
     qInstallMessageHandler(handler)
     app, engine, _bridge = create([sys.argv[0]],
@@ -110,6 +140,36 @@ def main() -> int:
         state["view"] = view
         if view.cols <= 0 or view.rows <= 0:
             problems.append(f"bootcheck: grid is {view.cols}x{view.rows}")
+        # The shell must be spawned into the settled grid, and the PTY must
+        # agree with the VT. A resize racing the shell's first prompt leaves
+        # zsh filling its partial-line marker with more spaces than the grid
+        # holds, which strands a stray '%' above the prompt.
+        grid = view._grid()
+        vt = view.terminal.vt
+        if (vt.cols, vt.rows) != grid:
+            problems.append(
+                f"bootcheck: shell spawned at {vt.cols}x{vt.rows}, grid is "
+                f"{grid[0]}x{grid[1]}")
+        if pty_size(view) != (vt.rows, vt.cols):
+            problems.append(
+                f"bootcheck: pty is {pty_size(view)[1]}x{pty_size(view)[0]}, "
+                f"vt is {vt.cols}x{vt.rows}")
+        QTimer.singleShot(0, resize_burst)
+
+    def resize_burst() -> None:
+        # Two sizes a few ms apart are one layout in progress, not two. Each
+        # one that reaches the shell is a SIGWINCH, and a SIGWINCH landing
+        # while the shell draws its prompt is what strands zsh's '%' marker.
+        resizes.clear()
+        root.resize(760, 460)
+        QTimer.singleShot(10, lambda: root.resize(700, 440))
+        QTimer.singleShot(250, resize_settled)
+
+    def resize_settled() -> None:
+        if len(resizes) != 1:
+            problems.append(
+                f"bootcheck: a two-step resize reached the shell {len(resizes)} "
+                f"times, expected 1")
         type_text(root, SCRIPT)
         QTimer.singleShot(700, check_output)
 
