@@ -88,29 +88,33 @@ special workspace), SSH-aware title, `hyprtk-term --list-tabs` for the bar.
 
 ## Suite integration checklist
 
-Follows the hyprtk-fm / hyprtk-editor pattern; nothing below is done yet.
+Done for **0.2.0** (suite v1.8.0), 2026-11-18.
 
-1. **Repo** — `hyprtk/hyprtk-term`, tag `v0.1.0`; vendor byte-identically into
-   `hyprtk-merged/installer/hyprtk-term/`.
-2. **Installer** — `1-install.sh` runs it after hyprtk-fm; `--system` mode for
-   the ISO (payload under `/usr/local/share/hyprtk-term`, launcher in
-   `/usr/local/bin`).
-3. **Packages** — add `libvterm` to `hypr/packages/terminaltools.sh` for all six
-   families (`libvterm` on Arch/Fedora/Void/Alpine, `libvterm0` on Debian,
-   `libvterm0` on openSUSE — verify per family with the T1 resolver).
-4. **Icon** — done in the brand kit (`term` glyph in `gen/brand.py`,
-   `hyprtk-term` in `gen/v09.py`, `v09/hyprtk-term*.svg` + PNG ladder) and
-   shipped in the payload with an absolute `Icon=` in `install.sh`; the merged
-   copy still has to be vendored.
-5. **Defaults** — `hl.env("TERMINAL", "hyprtk-term")` in `hypr/environment.lua`
-   (alacritty stays installed as the fallback), `Super+Return` keybind, bar
-   quick link, `hyprtk-fm` "Open terminal here", editor "Open terminal".
-6. **XDG** — `.desktop` with `Categories=System;TerminalEmulator;`,
-   `StartupWMClass=hyprtk-term`, `QS_APP_ID` is not needed (Qt sets the app id
-   from `setDesktopFileName`).
-7. **Docs** — README/CHANGELOG suite banner, wiki row, landing-page table row
-   (seven components becomes eight).
-8. **Gate** — T1, T2, package audit, then `push-all`.
+- [x] **Repo** — `hyprtk/hyprtk-term`, tags `v0.1.0` and `v0.2.0`; vendored
+      byte-identically into `hyprtk-merged/installer/hyprtk-term/`.
+- [x] **Installer** — `1-install.sh` runs it after hyprtk-editor; `--system`
+      mode for the ISO (payload under `/usr/local/share/hyprtk-term`, launcher in
+      `/usr/local/bin`, entry in `/usr/local/share/applications`).
+- [x] **Packages** — `libvterm` in `hypr/packages/terminaltools.sh`, renamed to
+      `libvterm0` on apt and zypper. Verified by the T1 matrix on all nine
+      family/variant containers (0 unexpected).
+- [x] **Icon** — `term` glyph in the brand kit (`gen/brand.py` + `gen/v09.py`);
+      `v09/hyprtk-term*.svg` + PNG ladder; shipped in the payload with an
+      absolute `Icon=`.
+- [x] **Defaults** — `hl.env("TERMINAL", "hyprtk-term")`, `Super+Return` with an
+      alacritty fallback, the bar's Terminal quick link (empty command, resolves
+      `$TERMINAL`), `hyprtk-fm` "Open Terminal Here" and the editor's terminal
+      action both try `hyprtk-term -d` first.
+- [x] **XDG** — `xdg-settings set default-terminal-emulator hyprtk-term.desktop`
+      from `set-default-apps.sh`; `Categories=System;TerminalEmulator;`,
+      `StartupWMClass=hyprtk-term`. Qt sets the Wayland app id from
+      `setDesktopFileName`, so no `QS_APP_ID` is needed.
+- [x] **ISO** — `packages.hyprtk` bakes `libvterm`, `customize_airootfs.sh`
+      installs the app system-wide, `hyprtk-first-run` links the launcher and
+      gates its stamp on the terminal being usable.
+- [ ] **Docs** — suite README, CHANGELOG and cheatsheet updated; the wiki and
+      the landing page still list seven components (they need eight).
+- [ ] **Gate** — T1 green; T2 and the package audit run as part of the release.
 
 ## Known risks
 
