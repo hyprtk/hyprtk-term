@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 — 2026-11-18
+
+### Added
+
+- **Scrollback search.** `Ctrl+Shift+F` opens a find bar over the active tab:
+  plain or regex, case toggle, match counter, next/previous (`Ctrl+Shift+G` /
+  `Shift+F3`), `Esc` to close. Matches are collected over history *and* the live
+  screen, the active one is highlighted stronger, and the view scrolls so the
+  match lands about a third down.
+  Scrollback lines cache their plain text when they are pushed, so searching a
+  10,000-line history costs one pass over strings instead of re-reading 800,000
+  cells through ctypes.
+- **Correct paint order.** Row backgrounds, then selection and search tints,
+  then glyphs. Highlights no longer dim the text they cover.
+
+### Changed
+
+- `VTerminal.line_text()` for cheap per-line text (cached for history, built on
+  demand for screen rows); `set_scrollback()` keeps the text cache aligned.
+- Search state is dropped on resize, where absolute line numbers would go stale.
+
 ## 0.1.0 — 2026-11-18
 
 First scaffold. A real shell in a real window, with the parts that make it

@@ -28,6 +28,7 @@ ApplicationWindow {
     property var fonts: []
     property string toastText: ""
     property bool settingsOpen: false
+    property bool findOpen: false
     property real menuX: 0
     property real menuY: 0
 
@@ -102,6 +103,10 @@ ApplicationWindow {
     function activate(id) {
         if (!views[id])
             return;
+        if (win.findOpen) {
+            findBar.view = views[id];
+            findBar.close();
+        }
         activeId = id;
         activeLabel = labelOf(id);
         setAlerted(id, false);
@@ -279,6 +284,37 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+
+        FindBar {
+            id: findBar
+            // The terminal views are created imperatively into this item, so
+            // the bar has to sit above them explicitly.
+            z: 20
+            theme: win.th
+            monoFamily: win.mono
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.topMargin: 8
+            anchors.rightMargin: 12
+            onClosed: {
+                win.findOpen = false;
+                if (win.activeView())
+                    win.activeView().forceActiveFocus();
+            }
+        }
+    }
+
+    function toggleFind() {
+        if (win.findOpen) {
+            findBar.close();
+            return;
+        }
+        var view = win.activeView();
+        if (!view)
+            return;
+        findBar.view = view;
+        win.findOpen = true;
+        findBar.open();
     }
 
     // ---------------------------------------------------------------- toast --
@@ -377,6 +413,18 @@ ApplicationWindow {
     Shortcut {
         sequences: ["Ctrl+,"]
         onActivated: win.settingsOpen = !win.settingsOpen
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+F"]
+        onActivated: win.toggleFind()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Shift+G", "Shift+F3"]
+        onActivated: win.findOpen && findBar.view && findBar.view.searchNext()
+    }
+    Shortcut {
+        sequences: ["Shift+Ctrl+G", "F3"]
+        onActivated: win.findOpen && findBar.view && findBar.view.searchPrevious()
     }
     Shortcut {
         sequences: ["Ctrl+=", "Ctrl+Shift+="]

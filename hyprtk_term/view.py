@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QGuiApplication, QPainte
 from PySide6.QtQuick import QQuickItem, QQuickPaintedItem
 
 from . import palette as palette_mod
+from . import search as search_mod
 from . import select as select_mod
 from . import settings as settings_mod
 from .terminal import Terminal
@@ -55,6 +56,7 @@ class TerminalView(QQuickPaintedItem):
     exited = Signal(int)
     contextMenuRequested = Signal(float, float)
     selectionChanged = Signal()
+    searchChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,6 +81,11 @@ class TerminalView(QQuickPaintedItem):
         self._sel = None                # (line0, col0, line1, col1) absolute
         self._sel_anchor = None
         self._selecting = False
+        self._matches: list = []
+        self._match_index = -1
+        self._search_case = False
+        self._search_regex = False
+        self._search_query = ""
         self._default_argv: list[str] | None = None
         self._cwd: str | None = None
         self._font_size = self._cfg.font_size
@@ -140,6 +147,16 @@ class TerminalView(QQuickPaintedItem):
         return self._sel is not None
 
     hasSelection = Property(bool, _get_has_selection, notify=selectionChanged)
+
+    def _get_match_count(self) -> int:
+        return len(self._matches)
+
+    matchCount = Property(int, _get_match_count, notify=searchChanged)
+
+    def _get_match_index(self) -> int:
+        return self._match_index + 1 if self._matches else 0
+
+    matchIndex = Property(int, _get_match_index, notify=searchChanged)
 
     # ------------------------------------------------------------- lifecycle --
 
@@ -245,7 +262,10 @@ class TerminalView(QQuickPaintedItem):
         if not self._term:
             return
         cols, rows = self._grid()
-        self._term.resize(rows, cols)
+        if self._term.resize(rows, cols):
+            self._matches = []
+            self._match_index = -1
+            self.searchChanged.emit()
         self._scroll = min(self._scroll, self._term.vt.scrollback_len)
 
     def geometryChanged(self, new, old) -> None:    # noqa: N802
@@ -285,26 +305,40 @@ class TerminalView(QQuickPaintedItem):
         base_bg = self._bg
         top = self._top_line()
         blink_on = self._cursor_on or not self._blink_enabled()
+        cell_w, cell_h = self._cw, self._ch
 
         for row in range(vt.rows):
             line = top + row
             runs = self._runs_for(line)
+            y = pad + row * cell_h
+
+            # Pass 1: run backgrounds. Selection and search tints must land on
+            # top of these but underneath the glyphs, so the row is drawn in
+            # three passes rather than one.
+            if runs:
+                x = pad
+                for run in runs:
+                    width = run.cols * cell_w
+                    if run.bg != base_bg:
+                        painter.fillRect(QRectF(x, y, width, cell_h), QColor(run.bg))
+                    x += width
+
+            self._fill_selection_row(painter, line, y, pad)
+            self._fill_matches_row(painter, line, y, pad)
+
+            # Pass 2: the glyphs themselves.
             if not runs:
                 continue
-            y = pad + row * self._ch
             x = pad
             for run in runs:
-                width = run.cols * self._cw
-                fg = QColor(run.fg)
-                if run.bg != base_bg:
-                    painter.fillRect(QRectF(x, y, width, self._ch), QColor(run.bg))
+                width = run.cols * cell_w
                 if run.flags & A_BLINK and not blink_on:
                     x += width
                     continue
+                fg = QColor(run.fg)
                 painter.setPen(fg)
-                font = self._font_for(run.flags)
-                painter.setFont(font)
-                baseline = y + max(0.0, (self._ch - self._font_height) / 2) + self._ascent
+                painter.setFont(self._font_for(run.flags))
+                baseline = y + max(0.0, (cell_h - self._font_height) / 2) + self._ascent
                 painter.drawText(QPointF(x, baseline), run.text)
                 if run.flags & A_UNDERLINE:
                     style = (run.flags >> UNDERLINE_STYLE_SHIFT) & 0b11
@@ -318,11 +352,10 @@ class TerminalView(QQuickPaintedItem):
                         painter.drawLine(QPointF(x, uy + 1.5), QPointF(x + width, uy + 1.5))
                 if run.flags & A_STRIKE:
                     painter.setPen(QPen(fg, 1.0))
-                    sy = y + self._ch / 2
+                    sy = y + cell_h / 2
                     painter.drawLine(QPointF(x, sy), QPointF(x + width, sy))
                 x += width
 
-        self._paint_selection(painter, pad, top)
         self._paint_cursor(painter, pad, top)
 
     def _runs_for(self, line: int):
@@ -336,23 +369,34 @@ class TerminalView(QQuickPaintedItem):
             return []
         return vt.row_runs(row)
 
-    def _paint_selection(self, painter: QPainter, pad: int, top: int) -> None:
+    def _fill_selection_row(self, painter: QPainter, line: int, y: float, pad: int) -> None:
         if not self._sel:
             return
         l0, c0, l1, c1 = self._sel
-        vt = self._term.vt
+        if not (l0 <= line <= l1):
+            return
+        start = c0 if line == l0 else 0
+        end = c1 if line == l1 else self._term.vt.cols
+        if end <= start:
+            return
         colour = QColor(self._sel_color)
-        colour.setAlpha(95)
-        for line in range(l0, l1 + 1):
-            row = line - top
-            if not (0 <= row < vt.rows):
+        colour.setAlpha(110)
+        painter.fillRect(QRectF(pad + start * self._cw, y,
+                                (end - start) * self._cw, self._ch), colour)
+
+    def _fill_matches_row(self, painter: QPainter, line: int, y: float, pad: int) -> None:
+        if not self._matches or not self._term:
+            return
+        base = palette_mod.hex_to_int(self._colors.get("search", "#f9e2af"), 0xF9E2AF)
+        for index, match in enumerate(self._matches):
+            if match.line != line:
                 continue
-            start = c0 if line == l0 else 0
-            end = c1 if line == l1 else vt.cols
-            if end <= start:
-                continue
-            painter.fillRect(QRectF(pad + start * self._cw, pad + row * self._ch,
-                                    (end - start) * self._cw, self._ch), colour)
+            colour = QColor(base)
+            colour.setAlpha(170 if index == self._match_index else 60)
+            painter.fillRect(
+                QRectF(pad + match.start * self._cw, y,
+                       max(1, match.end - match.start) * self._cw, self._ch),
+                colour)
 
     def _paint_cursor(self, painter: QPainter, pad: int, top: int) -> None:
         vt = self._term.vt
@@ -579,6 +623,65 @@ class TerminalView(QQuickPaintedItem):
         if self.cursor().shape() != cursor:
             self.setCursor(cursor)
         super().hoverMoveEvent(event)
+
+    # ----------------------------------------------------------------- search --
+
+    @Slot(str, bool, bool, result=int)
+    def runSearch(self, query: str, case_sensitive: bool, regex: bool) -> int:  # noqa: N802
+        self._search_query = query or ""
+        self._search_case = bool(case_sensitive)
+        self._search_regex = bool(regex)
+        if not self._term or not self._search_query:
+            self._matches = []
+            self._match_index = -1
+            self.searchChanged.emit()
+            self._schedule_paint()
+            return 0
+        self._matches = search_mod.find_matches(
+            self._term.vt, self._search_query, self._search_case, self._search_regex)
+        self._match_index = 0 if self._matches else -1
+        if self._matches:
+            self._jump_to_match(0)
+        self.searchChanged.emit()
+        self._schedule_paint()
+        return len(self._matches)
+
+    @Slot(result=bool)
+    def searchNext(self) -> bool:                   # noqa: N802
+        return self._step_match(1)
+
+    @Slot(result=bool)
+    def searchPrevious(self) -> bool:               # noqa: N802
+        return self._step_match(-1)
+
+    def _step_match(self, direction: int) -> bool:
+        if not self._matches:
+            return False
+        self._match_index = search_mod.line_of_next(self._matches, self._match_index, direction)
+        self._jump_to_match(self._match_index)
+        self.searchChanged.emit()
+        self._schedule_paint()
+        return True
+
+    def _jump_to_match(self, index: int) -> None:
+        if not (0 <= index < len(self._matches)) or not self._term:
+            return
+        vt = self._term.vt
+        match = self._matches[index]
+        self._scroll = search_mod.scroll_for_line(match.line, vt.scrollback_len, vt.rows)
+        self.stateChanged.emit()
+
+    @Slot()
+    def clearSearch(self) -> None:                  # noqa: N802
+        self._matches = []
+        self._match_index = -1
+        self._search_query = ""
+        self.searchChanged.emit()
+        self._schedule_paint()
+
+    @Slot(result=str)
+    def searchText(self) -> str:                    # noqa: N802
+        return self._search_query
 
     # -------------------------------------------------------------- selection --
 

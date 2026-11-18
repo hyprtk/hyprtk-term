@@ -8,11 +8,12 @@ underneath. It follows the wallpaper, opens in a few hundred milliseconds and
 keeps a real shell honest: alt screen, truecolor, wide characters, scrollback,
 mouse reporting and bracketed paste all work.
 
-**Current version: 0.1.0** — see [CHANGELOG.md](CHANGELOG.md) and [PLAN.md](PLAN.md).
+**Current version: 0.2.0** — see [CHANGELOG.md](CHANGELOG.md) and [PLAN.md](PLAN.md).
 
 ![hyprtk-term](hyprtk_term/assets/hyprtk-term.svg)
 
 ![hyprtk-term rendering a shell](docs/probe.png)
+![scrollback search](docs/search.png)
 
 ## Why another terminal
 
@@ -35,6 +36,8 @@ every supported archive) and paints a grid on the CPU — which the benchmarks i
 **Window**
 - Tabs with the running program's title, middle-click to close, bell indicator
 - Scrollback (10,000 lines by default) with wheel scroll and jump-to-bottom
+- **Scrollback search** (`Ctrl+Shift+F`): plain or regex, case toggle, match
+  count, next/previous, active match highlighted
 - Linear selection, double-click word select, select-all, copy/paste
 - Right-click menu, font zoom, settings sheet (`Ctrl+,`)
 
@@ -80,6 +83,8 @@ hyprtk-term -d ~/Projects       # start somewhere else
 | `Ctrl+Shift+N` / `Ctrl+Shift+P`, `Alt+←` / `Alt+→` | Next / previous tab |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste |
 | `Ctrl+=` / `Ctrl+-` | Zoom |
+| `Ctrl+Shift+F` | Search scrollback |
+| `Ctrl+Shift+G` / `Shift+F3` | Next match |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+Q` | Quit |
 | `Shift`+drag | Select even when the app wants the mouse |
@@ -123,7 +128,7 @@ grid, ~3 ms to paint it. Numbers and method in [RESEARCH.md](RESEARCH.md).
 ## Development
 
 ```bash
-make test     # 93 unit tests, no display needed
+make test     # 113 unit tests, no display needed
 make qa       # tests + qmllint + headless boot + installer round-trip
 make shot     # offscreen screenshot to docs/probe.png
 make run

@@ -98,8 +98,10 @@ class VTerminal:
         self.focus_report = False
         self._title_parts: list[str] = []
 
-        # scrollback: (ncols, raw VTermScreenCell bytes)
+        # scrollback: (ncols, raw VTermScreenCell bytes) plus the plain text of
+        # each line, which is what search walks. Both deques stay aligned.
         self._sb: deque[tuple[int, bytes]] = deque(maxlen=max(1, self.scrollback_limit))
+        self._sb_text: deque[str] = deque(maxlen=max(1, self.scrollback_limit))
         self._sb_total = 0
 
         # rendering cache
@@ -210,11 +212,14 @@ class VTerminal:
             return
         self.scrollback_limit = limit
         keep = list(self._sb)[-limit:] if limit else []
+        keep_text = list(self._sb_text)[-limit:] if limit else []
         self._sb = deque(keep, maxlen=max(1, limit))
+        self._sb_text = deque(keep_text, maxlen=max(1, limit))
         self._sb_runs.clear()
 
     def clear_scrollback(self) -> None:
         self._sb.clear()
+        self._sb_text.clear()
         self._sb_total = 0
         self._sb_runs.clear()
 
@@ -247,6 +252,21 @@ class VTerminal:
             get(self._screen, V.Pos(row, col), C.byref(cell))
             out.append(_cell_char(cell))
         return out
+
+    def line_text(self, index: int) -> str:
+        """Plain text of an absolute line, cheap enough for a keystroke search.
+
+        Scrollback lines are cached as text when they are pushed; screen rows
+        are built on demand (a screen is at most a few thousand cells).
+        """
+        if index < 0:
+            return ""
+        if index < len(self._sb_text):
+            return self._sb_text[index]
+        row = index - len(self._sb_text)
+        if not (0 <= row < self.rows):
+            return ""
+        return "".join(self.line_cells(index)).rstrip()
 
     def history_text(self, limit: int = 4000) -> str:
         out: list[str] = []
@@ -391,6 +411,7 @@ class VTerminal:
         @V._SBCLEAR
         def sb_clear(_user):
             self._sb.clear()
+            self._sb_text.clear()
             self._sb_total = 0
             self._sb_runs.clear()
             return 1
@@ -425,6 +446,7 @@ class VTerminal:
         n = _trimmed_cells(cells, cols)
         raw = C.string_at(cells, max(1, n) * V.CELL_SIZE) if n else b""
         self._sb.append((cols, raw))
+        self._sb_text.append(_raw_text(raw))
         self._sb_total += 1
         # indices shift when the deque evicts, so drop the whole cache
         self._sb_runs.clear()
@@ -433,6 +455,8 @@ class VTerminal:
         if not self._sb:
             return 0
         _stored_cols, raw = self._sb.pop()
+        if self._sb_text:
+            self._sb_text.pop()
         C.memset(cells, 0, cols * V.CELL_SIZE)
         for i in range(cols):
             cell = cells[i]
@@ -554,6 +578,14 @@ def _runs_from_raw(cols: int, raw: bytes, term: "VTerminal") -> list[Run]:
     while len(cells) < cols:
         cells.append(((), 1, 0, blank_fg, blank_bg))
     return _build_runs(cells, term, cols)
+
+
+def _raw_text(raw: bytes) -> str:
+    out: list[str] = []
+    for i in range(len(raw) // V.CELL_SIZE):
+        cell = V.Cell.from_buffer_copy(raw, i * V.CELL_SIZE)
+        out.append(_cell_char(cell))
+    return "".join(out).rstrip()
 
 
 def _trimmed_cells(cells, cols: int) -> int:

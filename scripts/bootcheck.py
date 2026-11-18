@@ -128,7 +128,24 @@ def main() -> int:
 
     def settings_close() -> None:
         root.setProperty("settingsOpen", False)
-        QTimer.singleShot(150, palette)
+        QTimer.singleShot(150, find)
+
+    def find() -> None:
+        call("toggleFind")
+        view = visible_view()
+        found = view.runSearch("BOOTCHECK", False, False)
+        if found < 1:
+            problems.append(f"bootcheck: search found {found} matches for BOOTCHECK")
+        if not view.searchNext():
+            problems.append("bootcheck: searchNext reported no match")
+        html = view.runSearch("BOOTCHECK", False, True)
+        if html < 1:
+            problems.append("bootcheck: regex search found nothing")
+        view.clearSearch()
+        if view.matchCount != 0:
+            problems.append("bootcheck: clearSearch left matches")
+        call("toggleFind")
+        QTimer.singleShot(200, palette)
 
     def palette() -> None:
         call("applyAll")

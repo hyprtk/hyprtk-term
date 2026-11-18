@@ -57,14 +57,14 @@ only object crossing the boundary per tab is `TerminalView`, which exposes
       process
 - [x] pywal/bar palette → ANSI 16, live reload on wallpaper change
 - [x] Settings sheet: font family, size, opacity, scrollback, shell
-- [x] 93 unit tests, qmllint clean, headless boot check, installer round-trip
+- [x] 113 unit tests, qmllint clean, headless boot check, installer round-trip
 
 ## Not in v0.1 (deliberate)
 
 | Missing | Why | Planned |
 |---|---|---|
 | Splits / panes | A layout model on top of tabs; needs a focus ring and resize maths | v0.3 |
-| Scrollback search | Needs a text index over the ring and a highlight overlay | v0.2 |
+| ~~Scrollback search~~ | Done in **0.2.0** (`search.py`, find bar) | shipped |
 | OSC 8 hyperlinks | libvterm 0.3.3 has no hyperlink cell attribute | v0.3 (regex URL detection) |
 | Inline images (sixel/Kitty) | Separate protocol + image cache | unplanned |
 | Ligature clamping | QPainter shapes per run; sparse runs can form accidental ligatures | v0.2 |
@@ -75,7 +75,7 @@ only object crossing the boundary per tab is `TerminalView`, which exposes
 
 ## Roadmap
 
-**v0.2 — daily driver.** Scrollback search, IME pre-edit, ligature clamp,
+**v0.2 — daily driver.** Search shipped in 0.2.0; remaining: IME pre-edit, ligature clamp,
 per-tab cwd broadcasting, "open in cwd" for hyprtk-fm, font zoom per tab,
 context menu (copy/paste/select all/clear), bell indicator, config hot reload.
 
