@@ -1,6 +1,6 @@
 # hyprtk-term — plan
 
-Status: **v0.2.0 shipped with suite v1.8.0** (2026-11-18). Repo
+Status: **v0.2.0 shipped with suite v1.8.0** (follow-ups v1.8.1–v1.8.2, 2026-11-18). Repo
 `hyprtk/hyprtk-term` on `main`, tags `v0.1.0` and `v0.2.0`; vendored into
 `hyprtk-merged/installer/hyprtk-term/` and installed by `1-install.sh`. It is
 the session terminal (`$TERMINAL`, `Super+Return`, the bar's Terminal quick
