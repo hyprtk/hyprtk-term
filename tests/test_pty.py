@@ -10,6 +10,7 @@ import fcntl
 import os
 import struct
 import sys
+import tempfile
 import termios
 import time
 import unittest
@@ -71,6 +72,44 @@ class Spawn(unittest.TestCase):
         finally:
             p.terminate()
             p.close()
+
+    def test_a_large_write_is_queued_not_truncated(self):
+        """A paste bigger than the kernel buffer must survive.
+
+        The master fd is non-blocking, so one os.write() accepts only what the
+        buffer holds; the rest has to be queued and drained. The child switches
+        its tty to raw mode first and prints a marker, because data sent while
+        the line discipline is still canonical is dropped/echoed, which would
+        measure the tty rather than the queue.
+        """
+        payload = b"x" * 200_000
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "count")
+            p = Pty(["/bin/sh", "-c",
+                     f"stty raw -echo; printf READY; head -c {len(payload)} | wc -c > {out}"])
+            try:
+                deadline = time.time() + 5
+                seen = b""
+                while b"READY" not in seen and time.time() < deadline:
+                    seen += p.read_all()
+                    time.sleep(0.005)
+                self.assertIn(b"READY", seen)
+
+                self.assertEqual(p.write(payload), len(payload))
+                deadline = time.time() + 10
+                while p.pending and time.time() < deadline:
+                    p.flush()
+                    if p.pending:
+                        time.sleep(0.005)
+                self.assertEqual(p.pending, 0, "queued bytes were never flushed")
+
+                while p.poll() is None and time.time() < deadline:
+                    time.sleep(0.01)
+                with open(out) as handle:
+                    self.assertEqual(handle.read().strip(), str(len(payload)))
+            finally:
+                p.terminate()
+                p.close()
 
     def test_empty_command_is_rejected(self):
         with self.assertRaises(PtyError):
