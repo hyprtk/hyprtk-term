@@ -138,6 +138,19 @@ def main() -> int:
             problems.append("bootcheck: no visible TerminalView after startup")
             return finish()
         state["view"] = view
+        # QML resolves calls through the meta-object: a method without @Slot is
+        # invisible there and the action silently does nothing (that is how
+        # copy/paste/zoom/close-tab were dead in 0.2.8 and earlier).
+        for signature in (
+            "copy()", "paste()", "selectAll()", "clearSelection()",
+            "clearScrollback()", "scrollToBottom()", "zoom(double)",
+            "resetZoom()", "sendText(QString)", "focusTerminal()", "kill()",
+            "applySettings(QVariant,QVariant)", "selectionText()",
+            "searchText()", "scrollLines(int)",
+        ):
+            if view.metaObject().indexOfMethod(signature) < 0:
+                problems.append(
+                    f"bootcheck: TerminalView.{signature} is not a slot")
         if view.cols <= 0 or view.rows <= 0:
             problems.append(f"bootcheck: grid is {view.cols}x{view.rows}")
         # The shell must be spawned into the settled grid, and the PTY must
